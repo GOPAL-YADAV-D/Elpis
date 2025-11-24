@@ -76,6 +76,9 @@ class StreamlitAudioLoop:
         self.config = get_config(voice_name, system_instruction)
         self.error_log = []
         self.status_log = []
+        self.conversation_history = []  # Track full conversation
+        self.interview_start_time = None
+        self.interview_end_time = None
     
     def _generate_system_instruction(self):
         """Generate system instruction based on interview type and role"""
@@ -213,6 +216,8 @@ Listen to their answers and provide appropriate feedback."""
                         if not hasattr(self, 'responses'):
                             self.responses = []
                         self.responses.append(text)
+                        # Track in conversation history
+                        self.conversation_history.append({"role": "interviewer", "text": text})
 
                 while not self.audio_in_queue.empty():
                     self.audio_in_queue.get_nowait()
@@ -256,6 +261,8 @@ Listen to their answers and provide appropriate feedback."""
     async def send_message(self, message):
         """Send a text message to the model"""
         if self.session and self.is_running:
+            # Track candidate message in conversation history
+            self.conversation_history.append({"role": "candidate", "text": message})
             await self.session.send(input=message, end_of_turn=True)
 
     async def run(self):
@@ -270,6 +277,7 @@ Listen to their answers and provide appropriate feedback."""
                 self.out_queue = asyncio.Queue(maxsize=5)
                 self.is_running = True
                 self.responses = []
+                self.interview_start_time = asyncio.get_event_loop().time()
                 
                 self.status_log.append("✅ Connected to Gemini Live API")
 
@@ -306,7 +314,110 @@ Listen to their answers and provide appropriate feedback."""
 
     def stop(self):
         """Stop the session"""
+        if self.interview_start_time and not self.interview_end_time:
+            import time
+            self.interview_end_time = time.time()
         self.is_running = False
+    
+    async def generate_performance_report(self):
+        """Generate a detailed performance report using Gemini"""
+        
+        # Calculate interview duration
+        if self.interview_start_time and self.interview_end_time:
+            duration_seconds = int(self.interview_end_time - self.interview_start_time)
+            duration_minutes = duration_seconds // 60
+            duration_display = f"{duration_minutes} minutes {duration_seconds % 60} seconds"
+        else:
+            duration_display = "Unknown"
+        
+        # Build conversation transcript from available data
+        interviewer_responses = getattr(self, 'responses', [])
+        text_messages = self.conversation_history if hasattr(self, 'conversation_history') and self.conversation_history else []
+        
+        # If we have no data at all, return error
+        if not interviewer_responses and not text_messages:
+            return {
+                "error": "No interview data available. The interview may have been too short or no conversation was recorded.",
+                "duration": duration_display,
+                "interview_type": self.interview_type,
+                "job_role": self.job_role,
+                "candidate_name": self.user_name
+            }
+        
+        # Build transcript from available data
+        transcript_parts = []
+        
+        # Add interviewer responses
+        if interviewer_responses:
+            transcript_parts.append("=== Interviewer Questions and Comments ===")
+            for i, response in enumerate(interviewer_responses, 1):
+                transcript_parts.append(f"\nInterviewer [{i}]: {response}")
+        
+        # Add text messages if any
+        if text_messages:
+            transcript_parts.append("\n\n=== Text Messages Exchanged ===")
+            for msg in text_messages:
+                role = msg.get('role', 'unknown').title()
+                text = msg.get('text', '')
+                transcript_parts.append(f"\n{role}: {text}")
+        
+        transcript = "\n".join(transcript_parts)
+        
+        # Create analysis prompt
+        analysis_prompt = f"""You are an expert interview analyst. Analyze the following {self.interview_type} interview for a {self.job_role} position.
+
+Interview Duration: {duration_display}
+Candidate Name: {self.user_name}
+
+Note: This is a voice-based interview. The transcript below shows the interviewer's questions and comments. The candidate responded verbally (audio not transcribed).
+
+Interview Content:
+{transcript}
+
+Based on the interviewer's questions, comments, and the interview duration, provide a comprehensive performance report with the following sections:
+
+1. **Interview Summary** (1 paragraph describing what was covered based on the questions asked)
+
+2. **Questions & Topics Covered** (List the main topics and questions discussed)
+
+3. **Interview Quality Assessment** (Rate the interview structure and question quality 1-5)
+
+4. **Estimated Engagement Level** (Based on interview length and question flow: High/Medium/Low with explanation)
+
+5. **Recommendations for Next Steps**
+   - If interview was comprehensive: Recommend proceeding with technical assessment or next round
+   - If interview was brief: Recommend follow-up interview
+   - Suggest what additional areas should be explored
+
+6. **Overall Interview Rating** (1-10 scale based on interview completeness and question quality)
+
+Note: Since we don't have candidate audio transcriptions, focus your analysis on the interview structure, questions asked, and overall process quality."""
+        
+        try:
+            # Use a simple generate request for the analysis
+            response = await self.client.aio.models.generate_content(
+                model="gemini-2.0-flash-exp",
+                contents=analysis_prompt
+            )
+            return {
+                "duration": duration_display,
+                "interview_type": self.interview_type,
+                "job_role": self.job_role,
+                "candidate_name": self.user_name,
+                "analysis": response.text,
+                "transcript": transcript,
+                "num_questions": len(interviewer_responses)
+            }
+        except Exception as e:
+            import traceback
+            return {
+                "error": f"Failed to generate report: {str(e)}\n{traceback.format_exc()}",
+                "transcript": transcript,
+                "duration": duration_display,
+                "interview_type": self.interview_type,
+                "job_role": self.job_role,
+                "candidate_name": self.user_name
+            }
 
 
 def run_async_loop(loop_instance):
@@ -363,6 +474,10 @@ def main():
         st.session_state.thread = None
     if "gemini_responses" not in st.session_state:
         st.session_state.gemini_responses = []
+    if "show_report" not in st.session_state:
+        st.session_state.show_report = False
+    if "performance_report" not in st.session_state:
+        st.session_state.performance_report = None
 
     # Sidebar controls
     with st.sidebar:
@@ -501,11 +616,118 @@ def main():
                 if st.session_state.audio_loop:
                     st.session_state.audio_loop.stop()
                 st.session_state.session_active = False
+                # Store the audio loop instance before clearing it so we can generate report
+                st.session_state.last_audio_loop = st.session_state.audio_loop
                 st.session_state.audio_loop = None
                 st.rerun()
 
             # Apply circular style
             st.markdown('<div class="round-btn"></div>', unsafe_allow_html=True)
+    
+    # Performance Report Button (show after interview ends)
+    if not st.session_state.session_active and st.session_state.get("last_audio_loop"):
+        st.markdown("---")
+        col_report1, col_report2, col_report3 = st.columns([1, 2, 1])
+        with col_report2:
+            # Show some debug info
+            last_loop = st.session_state.last_audio_loop
+            num_responses = len(getattr(last_loop, 'responses', []))
+            st.caption(f"📊 Interview ended. {num_responses} interviewer responses recorded.")
+            
+            if st.button(
+                ":material/assessment: Generate Interview Report",
+                key="generate_report_btn",
+                use_container_width=True,
+                type="primary"
+            ):
+                with st.spinner("Analyzing interview..."):
+                    loop = asyncio.new_event_loop()
+                    asyncio.set_event_loop(loop)
+                    try:
+                        report = loop.run_until_complete(st.session_state.last_audio_loop.generate_performance_report())
+                        st.session_state.performance_report = report
+                        st.session_state.show_report = True
+                    except Exception as e:
+                        st.error(f"❌ Error generating report: {e}")
+                        import traceback
+                        st.code(traceback.format_exc())
+                    finally:
+                        loop.close()
+                        st.rerun()
+
+    # Display Performance Report
+    if st.session_state.show_report and st.session_state.performance_report:
+        st.markdown("---")
+        st.markdown('<h2 class="icon-text" style="text-align: center;"><span class="material-symbols-rounded">assessment</span> Interview Report</h2>', unsafe_allow_html=True)
+        
+        report = st.session_state.performance_report
+        
+        if "error" in report:
+            st.error("⚠️ " + report["error"])
+            
+            # Still show what we have
+            if report.get("duration"):
+                st.info(f"**Duration:** {report['duration']}")
+            if report.get("transcript"):
+                with st.expander("📝 View Available Data"):
+                    st.text(report["transcript"])
+        else:
+            # Report Header
+            col1, col2, col3, col4 = st.columns(4)
+            with col1:
+                st.metric("Candidate", report["candidate_name"])
+            with col2:
+                st.metric("Role", report["job_role"])
+            with col3:
+                st.metric("Duration", report["duration"])
+            with col4:
+                st.metric("Questions Asked", report.get("num_questions", "N/A"))
+            
+            st.info(f"**Interview Type:** {report['interview_type']}")
+            
+            # Analysis Section
+            st.markdown("### 📊 Interview Analysis")
+            st.markdown(report["analysis"])
+            
+            # Transcript Section (Collapsible)
+            with st.expander("📝 View Interview Content"):
+                st.text(report["transcript"])
+            
+            # Action Buttons
+            st.markdown("---")
+            col_action1, col_action2 = st.columns(2)
+            with col_action1:
+                if st.button(":material/download: Download Report", use_container_width=True):
+                    # Create downloadable report
+                    report_text = f"""
+PERFORMANCE REPORT
+==================
+
+Candidate: {report['candidate_name']}
+Position: {report['job_role']}
+Interview Type: {report['interview_type']}
+Duration: {report['duration']}
+
+{report['analysis']}
+
+FULL TRANSCRIPT
+===============
+
+{report['transcript']}
+"""
+                    st.download_button(
+                        label="Click to Download",
+                        data=report_text,
+                        file_name=f"interview_report_{report['candidate_name'].replace(' ', '_')}.txt",
+                        mime="text/plain"
+                    )
+            
+            with col_action2:
+                if st.button(":material/refresh: Start New Interview", use_container_width=True):
+                    st.session_state.show_report = False
+                    st.session_state.performance_report = None
+                    st.session_state.last_audio_loop = None
+                    st.rerun()
 
     # Main content area
     # col_left, col_right = st.columns([2, 1])
