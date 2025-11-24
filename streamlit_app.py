@@ -511,34 +511,39 @@ def main():
     # col_left, col_right = st.columns([2, 1])
 
     # with col_left:
-    st.markdown('<h2 class="icon-text"><span class="material-symbols-rounded">chat</span> Text Interaction</h2>', unsafe_allow_html=True)
     
-    # Text input for sending messages
-    with st.form(key="message_form", clear_on_submit=True):
-        user_message = st.text_area(
-            "Type your message:",
-            placeholder="Enter a message to send to Gemini...",
-            disabled=not st.session_state.session_active,
-            height=100
-        )
-        submit_button = st.form_submit_button(
-            "Send Message",
-            disabled=not st.session_state.session_active,
-            use_container_width=True
-        )
+    # Create centered container with reduced width
+    col1, col2, col3 = st.columns([1, 2, 1])
+    
+    with col2:
+        st.markdown('<h2 class="icon-text" style="text-align: center;"><span class="material-symbols-rounded">chat</span> Text Interaction</h2>', unsafe_allow_html=True)
         
-        if submit_button and user_message:
-            if st.session_state.audio_loop:
-                # Create a new event loop for this operation
-                loop = asyncio.new_event_loop()
-                asyncio.set_event_loop(loop)
-                try:
-                    loop.run_until_complete(st.session_state.audio_loop.send_message(user_message))
-                    st.success("Message sent!")
-                except Exception as e:
-                    st.error(f"Error sending message: {e}")
-                finally:
-                    loop.close()
+        # Text input for sending messages
+        with st.form(key="message_form", clear_on_submit=True):
+            user_message = st.text_area(
+                "Type your message:",
+                placeholder="Enter a message to send to Gemini...",
+                disabled=not st.session_state.session_active,
+                height=100
+            )
+            submit_button = st.form_submit_button(
+                "Send Message",
+                disabled=not st.session_state.session_active,
+                use_container_width=True
+            )
+            
+            if submit_button and user_message:
+                if st.session_state.audio_loop:
+                    # Create a new event loop for this operation
+                    loop = asyncio.new_event_loop()
+                    asyncio.set_event_loop(loop)
+                    try:
+                        loop.run_until_complete(st.session_state.audio_loop.send_message(user_message))
+                        st.success("Message sent!")
+                    except Exception as e:
+                        st.error(f"Error sending message: {e}")
+                    finally:
+                        loop.close()
 
     # Auto-refresh when session is active
     if st.session_state.session_active:
