@@ -403,7 +403,19 @@ def main():
         # Status indicator
         st.divider()
         if st.session_state.session_active:
-            st.markdown('<div class="icon-text" style="color: #0e8945; padding: 0.5rem; background: #d4edda; border-radius: 0.5rem; margin: 0.5rem 0;"><span class="material-symbols-rounded" style="color: #0e8945;">check_circle</span> Session Active</div>', unsafe_allow_html=True)
+            st.markdown('''
+                <div class="icon-text" style="
+                    color: #0e8945; 
+                    padding: 0.75rem 1rem; 
+                    background: #d4edda; 
+                    border-radius: 0.5rem; 
+                    margin: 0.75rem 0;
+                    border-left: 4px solid #0e8945;
+                ">
+                    <span class="material-symbols-rounded" style="color: #0e8945;">check_circle</span> 
+                    <strong>Session Active</strong>
+                </div>
+            ''', unsafe_allow_html=True)
             active_inputs = []
             if enable_audio:
                 active_inputs.append('<span class="icon-text"><span class="material-symbols-rounded">mic</span> Audio</span>')
@@ -412,9 +424,31 @@ def main():
             if enable_screen:
                 active_inputs.append('<span class="icon-text"><span class="material-symbols-rounded">monitor</span> Screen</span>')
             if active_inputs:
-                st.markdown(f'<div style="padding: 0.5rem; background: #e7f3ff; border-radius: 0.5rem; margin: 0.5rem 0;">Active: {" • ".join(active_inputs)}</div>', unsafe_allow_html=True)
+                st.markdown(f'''
+                    <div style="
+                        padding: 0.75rem 1rem; 
+                        background: #e7f3ff; 
+                        border-radius: 0.5rem; 
+                        margin: 0.5rem 0;
+                        border-left: 4px solid #0068c9;
+                    ">
+                        <strong>Active:</strong> {" • ".join(active_inputs)}
+                    </div>
+                ''', unsafe_allow_html=True)
         else:
-            st.markdown('<div class="icon-text" style="color: #666; padding: 0.5rem; background: #f0f0f0; border-radius: 0.5rem; margin: 0.5rem 0;"><span class="material-symbols-rounded">radio_button_unchecked</span> Session Inactive</div>', unsafe_allow_html=True)
+            st.markdown('''
+                <div class="icon-text" style="
+                    color: #666; 
+                    padding: 0.75rem 1rem; 
+                    background: #f0f0f0; 
+                    border-radius: 0.5rem; 
+                    margin: 0.75rem 0;
+                    border-left: 4px solid #999;
+                ">
+                    <span class="material-symbols-rounded">radio_button_unchecked</span> 
+                    <strong>Session Inactive</strong>
+                </div>
+            ''', unsafe_allow_html=True)
 
 
     left_col, _, _ = st.columns([1, 3, 3])
@@ -423,7 +457,7 @@ def main():
         if not st.session_state.session_active:
             # Play Button
             if st.button(
-                ":material/play_arrow:",
+                ":material/play_arrow: Start",
                 key="start_btn",
                 use_container_width=False,
                 help="Start Interview",
@@ -458,7 +492,7 @@ def main():
         else:
             # Stop Button
             if st.button(
-                ":material/stop_circle:",
+                ":material/stop_circle: Stop",
                 key="stop_btn",
                 use_container_width=False,
                 help="Stop Interview",
@@ -474,95 +508,37 @@ def main():
             st.markdown('<div class="round-btn"></div>', unsafe_allow_html=True)
 
     # Main content area
-    col_left, col_right = st.columns([2, 1])
+    # col_left, col_right = st.columns([2, 1])
 
-    with col_left:
-        st.markdown('<h2 class="icon-text"><span class="material-symbols-rounded">chat</span> Text Interaction</h2>', unsafe_allow_html=True)
-        
-        # Text input for sending messages
-        with st.form(key="message_form", clear_on_submit=True):
-            user_message = st.text_area(
-                "Type your message:",
-                placeholder="Enter a message to send to Gemini...",
-                disabled=not st.session_state.session_active,
-                height=100
-            )
-            submit_button = st.form_submit_button(
-                "Send Message",
-                disabled=not st.session_state.session_active,
-                use_container_width=True
-            )
-            
-            if submit_button and user_message:
-                if st.session_state.audio_loop:
-                    # Create a new event loop for this operation
-                    loop = asyncio.new_event_loop()
-                    asyncio.set_event_loop(loop)
-                    try:
-                        loop.run_until_complete(st.session_state.audio_loop.send_message(user_message))
-                        st.success("Message sent!")
-                    except Exception as e:
-                        st.error(f"Error sending message: {e}")
-                    finally:
-                        loop.close()
-
-    with col_right:
-        st.markdown('<h2 class="icon-text"><span class="material-symbols-rounded">info</span> Interview Session Info</h2>', unsafe_allow_html=True)
-        if st.session_state.audio_loop:
-            st.markdown(f"""
-            **Interview Type:** {st.session_state.audio_loop.interview_type}
-            
-            **Job Role:** {st.session_state.audio_loop.job_role}
-            
-            **Candidate:** {st.session_state.audio_loop.user_name}
-            
-            **Voice:** {st.session_state.audio_loop.voice_name}
-            """)
-        else:
-            st.markdown(f"""
-            **Interview Type:** N/A
-            
-            **Job Role:** N/A
-                        
-            **Candidate:** N/A
-            
-            **Voice:** Zephyr 
-            """)
-
-    # Response display area
-    st.divider()
-    col_responses, col_debug = st.columns([2, 1])
+    # with col_left:
+    st.markdown('<h2 class="icon-text"><span class="material-symbols-rounded">chat</span> Text Interaction</h2>', unsafe_allow_html=True)
     
-    with col_responses:
-        st.markdown('<h2 class="icon-text"><span class="material-symbols-rounded">smart_toy</span> Interview Responses</h2>', unsafe_allow_html=True)
-        response_container = st.container()
-        with response_container:
-            # Get responses from audio loop if available
-            if st.session_state.audio_loop and hasattr(st.session_state.audio_loop, 'responses'):
-                for response in st.session_state.audio_loop.responses[-10:]:
-                    st.text(response)
-            elif not st.session_state.session_active:
-                st.info("No responses yet. Start a session and send a message or speak!")
-    
-    # with col_debug:
-    #     st.markdown('<h2 class="icon-text"><span class="material-symbols-rounded">bug_report</span> Debug Info</h2>', unsafe_allow_html=True)
+    # Text input for sending messages
+    with st.form(key="message_form", clear_on_submit=True):
+        user_message = st.text_area(
+            "Type your message:",
+            placeholder="Enter a message to send to Gemini...",
+            disabled=not st.session_state.session_active,
+            height=100
+        )
+        submit_button = st.form_submit_button(
+            "Send Message",
+            disabled=not st.session_state.session_active,
+            use_container_width=True
+        )
         
-    #     if st.session_state.audio_loop:
-    #         # Status log
-    #         with st.expander("📊 Status Log", expanded=True):
-    #             if st.session_state.audio_loop.status_log:
-    #                 for status in st.session_state.audio_loop.status_log[-5:]:
-    #                     st.caption(status)
-    #             else:
-    #                 st.caption("No status updates")
-            
-    #         # Error log
-    #         with st.expander("⚠️ Error Log", expanded=False):
-    #             if st.session_state.audio_loop.error_log:
-    #                 for error in st.session_state.audio_loop.error_log:
-    #                     st.error(error)
-    #             else:
-    #                 st.success("No errors")
+        if submit_button and user_message:
+            if st.session_state.audio_loop:
+                # Create a new event loop for this operation
+                loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(loop)
+                try:
+                    loop.run_until_complete(st.session_state.audio_loop.send_message(user_message))
+                    st.success("Message sent!")
+                except Exception as e:
+                    st.error(f"Error sending message: {e}")
+                finally:
+                    loop.close()
 
     # Auto-refresh when session is active
     if st.session_state.session_active:
