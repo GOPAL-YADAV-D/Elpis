@@ -1,7 +1,3 @@
-"""
-Streamlit interface for Gemini Live API
-Provides controls for audio/video streaming with start/stop functionality
-"""
 
 import os
 import asyncio
@@ -56,12 +52,14 @@ def get_config(voice_name="Zephyr", system_instruction=None):
 
 
 class StreamlitAudioLoop:
-    def __init__(self, enable_camera=False, enable_screen=False, enable_audio=True, voice_name="Zephyr", user_name="Candidate"):
+    def __init__(self, enable_camera=False, enable_screen=False, enable_audio=True, voice_name="Zephyr", user_name="Candidate", interview_type="Technical", job_role="Software Developer"):
         self.enable_camera = enable_camera
         self.enable_screen = enable_screen
         self.enable_audio = enable_audio
         self.voice_name = voice_name
         self.user_name = user_name
+        self.interview_type = interview_type
+        self.job_role = job_role
         
         self.audio_in_queue = None
         self.out_queue = None
@@ -72,16 +70,41 @@ class StreamlitAudioLoop:
         self.pya = pyaudio.PyAudio()
         self.client = init_client()
         
-        system_instruction = f"""You are a friendly but professional technical interviewer. 
-Your goal is to interview {self.user_name} for a Python developer position.
-Start by greeting {self.user_name} by name and asking them to introduce themselves.
-Then, ask intermediate-level Python questions (e.g., about decorators, generators, context managers, threading, memory management).
-Listen to their answers, provide brief constructive feedback if they are wrong, and move to the next question.
-Keep the conversation engaging and interactive."""
+        # Generate dynamic system instruction based on interview type
+        system_instruction = self._generate_system_instruction()
         
         self.config = get_config(voice_name, system_instruction)
         self.error_log = []
         self.status_log = []
+    
+    def _generate_system_instruction(self):
+        """Generate system instruction based on interview type and role"""
+        base_intro = f"""You are a friendly but professional {self.interview_type.lower()} interviewer.
+Your goal is to interview {self.user_name} for a {self.job_role} position.
+Start by greeting {self.user_name} by name and asking them to introduce themselves."""
+        
+        if self.interview_type == "Technical":
+            specific_instructions = f"""Then, ask relevant technical questions based on the {self.job_role} role.
+For software development roles, focus on programming concepts, algorithms, data structures, and system design.
+For data science roles, focus on statistics, machine learning, data analysis, and tools.
+Listen to their answers, provide brief constructive feedback if needed, and move to the next question."""
+        elif self.interview_type == "Behavioral":
+            specific_instructions = """Then, ask behavioral questions using the STAR method (Situation, Task, Action, Result).
+Ask about past experiences, teamwork, conflict resolution, leadership, and problem-solving.
+Listen actively and ask follow-up questions to understand their experiences better."""
+        elif self.interview_type == "System Design":
+            specific_instructions = """Then, present system design problems appropriate for the role.
+Ask them to design scalable systems, discuss trade-offs, and explain their architectural decisions.
+Probe deeper into scalability, reliability, and performance considerations."""
+        elif self.interview_type == "HR/General":
+            specific_instructions = """Then, ask questions about their background, career goals, motivation, and cultural fit.
+Discuss their expectations, work style, and why they're interested in this role.
+Keep the conversation warm and welcoming while gathering important information."""
+        else:
+            specific_instructions = """Then, ask relevant questions appropriate for the interview type and role.
+Listen to their answers and provide appropriate feedback."""
+        
+        return f"""{base_intro}\n{specific_instructions}\nKeep the conversation engaging and interactive."""
 
     def _get_frame(self, cap):
         ret, frame = cap.read()
@@ -292,11 +315,28 @@ def run_async_loop(loop_instance):
 
 
 def main():
-    st.set_page_config(page_title="Gemini Live API Controller", layout="wide")
+    st.set_page_config(page_title="Elpis: Interview Assistant", layout="wide", page_icon="")
     
-    st.title("🎙️ Gemini Live API Controller")
-    st.markdown("Control your Gemini Live API session with audio, camera, and screen sharing")
-    st.info("✨ **Enhanced Features Enabled:** Proactive Audio & Affective Dialog for more natural conversations")
+    # Add Material Symbols font and custom CSS
+    st.markdown("""
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" />
+    <style>
+        .material-symbols-rounded {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+            vertical-align: middle;
+            font-size: 1.2em;
+        }
+        .icon-text {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+    </style>
+    """, unsafe_allow_html=True)
+    
+    # st.markdown('<h1 class="icon-text"><span class="material-symbols-rounded">mic</span> Gemini Live API Controller</h1>', unsafe_allow_html=True)
+    # st.markdown("Control your Gemini Live API session with audio, camera, and screen sharing")
+    # st.info("✨ **Enhanced Features Enabled:** Proactive Audio & Affective Dialog for more natural conversations")
 
     # Check for API key
     if not os.environ.get("GEMINI_API_KEY"):
@@ -316,18 +356,36 @@ def main():
 
     # Sidebar controls
     with st.sidebar:
-        st.header("⚙️ Session Controls")
+        st.markdown('<h2 class="icon-text"><span class="material-symbols-rounded">settings</span> Interview Settings</h2>', unsafe_allow_html=True)
         
-        # Input options
-        st.subheader("Input Options")
-        user_name = st.text_input("👤 Your Name", value="Candidate", disabled=st.session_state.session_active)
-        enable_audio = st.checkbox("🎤 Enable Audio Input", value=True, disabled=st.session_state.session_active)
-        enable_camera = st.checkbox("📹 Enable Camera", value=False, disabled=st.session_state.session_active)
-        enable_screen = st.checkbox("🖥️ Enable Screen Sharing", value=False, disabled=st.session_state.session_active)
+        # Interview Configuration
+        st.markdown('<h3 class="icon-text"><span class="material-symbols-rounded">target</span> Interview Configuration</h3>', unsafe_allow_html=True)
+        user_name = st.text_input(":material/person: Your Name", value="Candidate", disabled=st.session_state.session_active, key="user_name_input")
+
+
         
+        interview_types = ["Technical", "Behavioral", "System Design", "HR/General"]
+
+        selected_interview_type = st.selectbox(":material/grading: Interview Type",interview_types,index=0,disabled=st.session_state.session_active,help="Choose the type of interview you want to practice")
+
+        
+        job_role = st.text_input(":material/work: Job Role", value="Software Developer", disabled=st.session_state.session_active, help="Enter the specific role (e.g., Python Developer, Data Scientist, Frontend Engineer)")
+
+        
+        st.divider()
+        
+      # Input options header
+        st.markdown('<h3 class="icon-text"><span class="material-symbols-rounded">tune</span> Input Options</h3>', unsafe_allow_html=True)
+
+        # Toggles
+        enable_audio = st.toggle(":material/mic: Enable Audio Input", value=True, disabled=st.session_state.session_active)
+        enable_camera = st.toggle(":material/photo_camera: Enable Camera", value=False, disabled=st.session_state.session_active)
+        enable_screen = st.toggle(":material/screen_share: Enable Screen Sharing", value=False, disabled=st.session_state.session_active)
+
+        # Voice selectbox
         voice_options = ["Zephyr", "Puck", "Charon", "Kore", "Fenrir", "Aoede"]
-        selected_voice = st.selectbox("🗣️ Voice", voice_options, index=0, disabled=st.session_state.session_active)
-        
+        selected_voice = st.selectbox(":material/record_voice_over: Voice", voice_options, index=0, disabled=st.session_state.session_active)
+
         if enable_camera and enable_screen:
             st.warning("⚠️ Only one video source can be active at a time. Camera will be prioritized.")
             enable_screen = False
@@ -336,18 +394,22 @@ def main():
 
         # Start/Stop buttons
         col1, col2 = st.columns(2)
-        
+
         with col1:
-            if st.button("▶️ Start", disabled=st.session_state.session_active, use_container_width=True):
+            if st.button(":material/play_arrow: Start", 
+                        disabled=st.session_state.session_active, 
+                        use_container_width=True):
                 st.session_state.audio_loop = StreamlitAudioLoop(
                     enable_camera=enable_camera,
                     enable_screen=enable_screen,
                     enable_audio=enable_audio,
                     voice_name=selected_voice,
-                    user_name=user_name
+                    user_name=user_name,
+                    interview_type=selected_interview_type,
+                    job_role=job_role
                 )
                 st.session_state.thread = threading.Thread(
-                    target=run_async_loop, 
+                    target=run_async_loop,
                     args=(st.session_state.audio_loop,),
                     daemon=True
                 )
@@ -357,33 +419,37 @@ def main():
                 st.rerun()
 
         with col2:
-            if st.button("⏹️ Stop", disabled=not st.session_state.session_active, use_container_width=True):
+            if st.button(":material/stop_circle: Stop", 
+                        disabled=not st.session_state.session_active,
+                        use_container_width=True):
                 if st.session_state.audio_loop:
                     st.session_state.audio_loop.stop()
                 st.session_state.session_active = False
                 st.session_state.audio_loop = None
                 st.rerun()
 
+
         # Status indicator
         st.divider()
         if st.session_state.session_active:
-            st.success("🟢 Session Active")
+            st.markdown('<div class="icon-text" style="color: #0e8945; padding: 0.5rem; background: #d4edda; border-radius: 0.5rem; margin: 0.5rem 0;"><span class="material-symbols-rounded" style="color: #0e8945;">check_circle</span> Session Active</div>', unsafe_allow_html=True)
             active_inputs = []
             if enable_audio:
-                active_inputs.append("🎤 Audio")
+                active_inputs.append('<span class="icon-text"><span class="material-symbols-rounded">mic</span> Audio</span>')
             if enable_camera:
-                active_inputs.append("📹 Camera")
+                active_inputs.append('<span class="icon-text"><span class="material-symbols-rounded">videocam</span> Camera</span>')
             if enable_screen:
-                active_inputs.append("🖥️ Screen")
-            st.info(f"Active: {', '.join(active_inputs)}")
+                active_inputs.append('<span class="icon-text"><span class="material-symbols-rounded">monitor</span> Screen</span>')
+            if active_inputs:
+                st.markdown(f'<div style="padding: 0.5rem; background: #e7f3ff; border-radius: 0.5rem; margin: 0.5rem 0;">Active: {" • ".join(active_inputs)}</div>', unsafe_allow_html=True)
         else:
-            st.info("🔴 Session Inactive")
+            st.markdown('<div class="icon-text" style="color: #666; padding: 0.5rem; background: #f0f0f0; border-radius: 0.5rem; margin: 0.5rem 0;"><span class="material-symbols-rounded">radio_button_unchecked</span> Session Inactive</div>', unsafe_allow_html=True)
 
     # Main content area
     col_left, col_right = st.columns([2, 1])
 
     with col_left:
-        st.header("💬 Send Message")
+        st.markdown('<h2 class="icon-text"><span class="material-symbols-rounded">chat</span> Send Message</h2>', unsafe_allow_html=True)
         
         # Text input for sending messages
         with st.form(key="message_form", clear_on_submit=True):
@@ -413,23 +479,40 @@ def main():
                         loop.close()
 
     with col_right:
-        st.header("📋 Session Info")
-        st.markdown(f"""
-        **Model:** `{MODEL}`
-        
-        **Voice:** {st.session_state.audio_loop.voice_name if st.session_state.audio_loop else 'Zephyr'}
-        
-        **Sample Rates:**
-        - Send: {SEND_SAMPLE_RATE} Hz
-        - Receive: {RECEIVE_SAMPLE_RATE} Hz
-        """)
+        st.markdown('<h2 class="icon-text"><span class="material-symbols-rounded">info</span> Session Info</h2>', unsafe_allow_html=True)
+        if st.session_state.audio_loop:
+            st.markdown(f"""
+            **Interview Type:** {st.session_state.audio_loop.interview_type}
+            
+            **Job Role:** {st.session_state.audio_loop.job_role}
+            
+            **Candidate:** {st.session_state.audio_loop.user_name}
+            
+            **Model:** `{MODEL.split('/')[-1]}`
+            
+            **Voice:** {st.session_state.audio_loop.voice_name}
+            
+            **Sample Rates:**
+            - Send: {SEND_SAMPLE_RATE} Hz
+            - Receive: {RECEIVE_SAMPLE_RATE} Hz
+            """)
+        else:
+            st.markdown(f"""
+            **Model:** `{MODEL.split('/')[-1]}`
+            
+            **Voice:** Zephyr (default)
+            
+            **Sample Rates:**
+            - Send: {SEND_SAMPLE_RATE} Hz
+            - Receive: {RECEIVE_SAMPLE_RATE} Hz
+            """)
 
     # Response display area
     st.divider()
     col_responses, col_debug = st.columns([2, 1])
     
     with col_responses:
-        st.header("🤖 Gemini Responses")
+        st.markdown('<h2 class="icon-text"><span class="material-symbols-rounded">smart_toy</span> Gemini Responses</h2>', unsafe_allow_html=True)
         response_container = st.container()
         with response_container:
             # Get responses from audio loop if available
@@ -440,7 +523,7 @@ def main():
                 st.info("No responses yet. Start a session and send a message or speak!")
     
     with col_debug:
-        st.header("🔍 Debug Info")
+        st.markdown('<h2 class="icon-text"><span class="material-symbols-rounded">bug_report</span> Debug Info</h2>', unsafe_allow_html=True)
         
         if st.session_state.audio_loop:
             # Status log
