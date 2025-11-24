@@ -315,6 +315,20 @@ def run_async_loop(loop_instance):
 
 
 def main():
+    st.markdown("""
+    <style>
+    .round-btn > button {
+        border-radius: 50% !important;
+        height: 100px !important;
+        width: 100px !important;
+        padding: 0 !important;
+        font-size: 28px !important;
+        text-align: center !important;
+    }
+    </style>
+    """, unsafe_allow_html=True)
+
+
     st.set_page_config(page_title="Elpis: Interview Assistant", layout="wide", page_icon="")
     
     # Add Material Symbols font and custom CSS
@@ -333,10 +347,6 @@ def main():
         }
     </style>
     """, unsafe_allow_html=True)
-    
-    # st.markdown('<h1 class="icon-text"><span class="material-symbols-rounded">mic</span> Gemini Live API Controller</h1>', unsafe_allow_html=True)
-    # st.markdown("Control your Gemini Live API session with audio, camera, and screen sharing")
-    # st.info("✨ **Enhanced Features Enabled:** Proactive Audio & Affective Dialog for more natural conversations")
 
     # Check for API key
     if not os.environ.get("GEMINI_API_KEY"):
@@ -390,15 +400,39 @@ def main():
             st.warning("⚠️ Only one video source can be active at a time. Camera will be prioritized.")
             enable_screen = False
 
+        # Status indicator
         st.divider()
+        if st.session_state.session_active:
+            st.markdown('<div class="icon-text" style="color: #0e8945; padding: 0.5rem; background: #d4edda; border-radius: 0.5rem; margin: 0.5rem 0;"><span class="material-symbols-rounded" style="color: #0e8945;">check_circle</span> Session Active</div>', unsafe_allow_html=True)
+            active_inputs = []
+            if enable_audio:
+                active_inputs.append('<span class="icon-text"><span class="material-symbols-rounded">mic</span> Audio</span>')
+            if enable_camera:
+                active_inputs.append('<span class="icon-text"><span class="material-symbols-rounded">videocam</span> Camera</span>')
+            if enable_screen:
+                active_inputs.append('<span class="icon-text"><span class="material-symbols-rounded">monitor</span> Screen</span>')
+            if active_inputs:
+                st.markdown(f'<div style="padding: 0.5rem; background: #e7f3ff; border-radius: 0.5rem; margin: 0.5rem 0;">Active: {" • ".join(active_inputs)}</div>', unsafe_allow_html=True)
+        else:
+            st.markdown('<div class="icon-text" style="color: #666; padding: 0.5rem; background: #f0f0f0; border-radius: 0.5rem; margin: 0.5rem 0;"><span class="material-symbols-rounded">radio_button_unchecked</span> Session Inactive</div>', unsafe_allow_html=True)
 
-        # Start/Stop buttons
-        col1, col2 = st.columns(2)
 
-        with col1:
-            if st.button(":material/play_arrow: Start", 
-                        disabled=st.session_state.session_active, 
-                        use_container_width=True):
+    left_col, _, _ = st.columns([1, 3, 3])
+
+    with left_col:
+        if not st.session_state.session_active:
+            # Play Button
+            if st.button(
+                ":material/play_arrow:",
+                key="start_btn",
+                use_container_width=False,
+                help="Start Interview",
+                type="primary",
+                icon=None,
+                on_click=None,
+                kwargs=None,
+                args=None
+            ):
                 st.session_state.audio_loop = StreamlitAudioLoop(
                     enable_camera=enable_camera,
                     enable_screen=enable_screen,
@@ -418,38 +452,32 @@ def main():
                 st.session_state.gemini_responses = []
                 st.rerun()
 
-        with col2:
-            if st.button(":material/stop_circle: Stop", 
-                        disabled=not st.session_state.session_active,
-                        use_container_width=True):
+            # Apply circular style
+            st.markdown('<div class="round-btn"></div>', unsafe_allow_html=True)
+
+        else:
+            # Stop Button
+            if st.button(
+                ":material/stop_circle:",
+                key="stop_btn",
+                use_container_width=False,
+                help="Stop Interview",
+                type="secondary"
+            ):
                 if st.session_state.audio_loop:
                     st.session_state.audio_loop.stop()
                 st.session_state.session_active = False
                 st.session_state.audio_loop = None
                 st.rerun()
 
-
-        # Status indicator
-        st.divider()
-        if st.session_state.session_active:
-            st.markdown('<div class="icon-text" style="color: #0e8945; padding: 0.5rem; background: #d4edda; border-radius: 0.5rem; margin: 0.5rem 0;"><span class="material-symbols-rounded" style="color: #0e8945;">check_circle</span> Session Active</div>', unsafe_allow_html=True)
-            active_inputs = []
-            if enable_audio:
-                active_inputs.append('<span class="icon-text"><span class="material-symbols-rounded">mic</span> Audio</span>')
-            if enable_camera:
-                active_inputs.append('<span class="icon-text"><span class="material-symbols-rounded">videocam</span> Camera</span>')
-            if enable_screen:
-                active_inputs.append('<span class="icon-text"><span class="material-symbols-rounded">monitor</span> Screen</span>')
-            if active_inputs:
-                st.markdown(f'<div style="padding: 0.5rem; background: #e7f3ff; border-radius: 0.5rem; margin: 0.5rem 0;">Active: {" • ".join(active_inputs)}</div>', unsafe_allow_html=True)
-        else:
-            st.markdown('<div class="icon-text" style="color: #666; padding: 0.5rem; background: #f0f0f0; border-radius: 0.5rem; margin: 0.5rem 0;"><span class="material-symbols-rounded">radio_button_unchecked</span> Session Inactive</div>', unsafe_allow_html=True)
+            # Apply circular style
+            st.markdown('<div class="round-btn"></div>', unsafe_allow_html=True)
 
     # Main content area
     col_left, col_right = st.columns([2, 1])
 
     with col_left:
-        st.markdown('<h2 class="icon-text"><span class="material-symbols-rounded">chat</span> Send Message</h2>', unsafe_allow_html=True)
+        st.markdown('<h2 class="icon-text"><span class="material-symbols-rounded">chat</span> Text Interaction</h2>', unsafe_allow_html=True)
         
         # Text input for sending messages
         with st.form(key="message_form", clear_on_submit=True):
@@ -472,14 +500,14 @@ def main():
                     asyncio.set_event_loop(loop)
                     try:
                         loop.run_until_complete(st.session_state.audio_loop.send_message(user_message))
-                        st.success("✅ Message sent!")
+                        st.success("Message sent!")
                     except Exception as e:
-                        st.error(f"❌ Error sending message: {e}")
+                        st.error(f"Error sending message: {e}")
                     finally:
                         loop.close()
 
     with col_right:
-        st.markdown('<h2 class="icon-text"><span class="material-symbols-rounded">info</span> Session Info</h2>', unsafe_allow_html=True)
+        st.markdown('<h2 class="icon-text"><span class="material-symbols-rounded">info</span> Interview Session Info</h2>', unsafe_allow_html=True)
         if st.session_state.audio_loop:
             st.markdown(f"""
             **Interview Type:** {st.session_state.audio_loop.interview_type}
@@ -488,23 +516,17 @@ def main():
             
             **Candidate:** {st.session_state.audio_loop.user_name}
             
-            **Model:** `{MODEL.split('/')[-1]}`
-            
             **Voice:** {st.session_state.audio_loop.voice_name}
-            
-            **Sample Rates:**
-            - Send: {SEND_SAMPLE_RATE} Hz
-            - Receive: {RECEIVE_SAMPLE_RATE} Hz
             """)
         else:
             st.markdown(f"""
-            **Model:** `{MODEL.split('/')[-1]}`
+            **Interview Type:** N/A
             
-            **Voice:** Zephyr (default)
+            **Job Role:** N/A
+                        
+            **Candidate:** N/A
             
-            **Sample Rates:**
-            - Send: {SEND_SAMPLE_RATE} Hz
-            - Receive: {RECEIVE_SAMPLE_RATE} Hz
+            **Voice:** Zephyr 
             """)
 
     # Response display area
@@ -512,7 +534,7 @@ def main():
     col_responses, col_debug = st.columns([2, 1])
     
     with col_responses:
-        st.markdown('<h2 class="icon-text"><span class="material-symbols-rounded">smart_toy</span> Gemini Responses</h2>', unsafe_allow_html=True)
+        st.markdown('<h2 class="icon-text"><span class="material-symbols-rounded">smart_toy</span> Interview Responses</h2>', unsafe_allow_html=True)
         response_container = st.container()
         with response_container:
             # Get responses from audio loop if available
@@ -522,25 +544,25 @@ def main():
             elif not st.session_state.session_active:
                 st.info("No responses yet. Start a session and send a message or speak!")
     
-    with col_debug:
-        st.markdown('<h2 class="icon-text"><span class="material-symbols-rounded">bug_report</span> Debug Info</h2>', unsafe_allow_html=True)
+    # with col_debug:
+    #     st.markdown('<h2 class="icon-text"><span class="material-symbols-rounded">bug_report</span> Debug Info</h2>', unsafe_allow_html=True)
         
-        if st.session_state.audio_loop:
-            # Status log
-            with st.expander("📊 Status Log", expanded=True):
-                if st.session_state.audio_loop.status_log:
-                    for status in st.session_state.audio_loop.status_log[-5:]:
-                        st.caption(status)
-                else:
-                    st.caption("No status updates")
+    #     if st.session_state.audio_loop:
+    #         # Status log
+    #         with st.expander("📊 Status Log", expanded=True):
+    #             if st.session_state.audio_loop.status_log:
+    #                 for status in st.session_state.audio_loop.status_log[-5:]:
+    #                     st.caption(status)
+    #             else:
+    #                 st.caption("No status updates")
             
-            # Error log
-            with st.expander("⚠️ Error Log", expanded=False):
-                if st.session_state.audio_loop.error_log:
-                    for error in st.session_state.audio_loop.error_log:
-                        st.error(error)
-                else:
-                    st.success("No errors")
+    #         # Error log
+    #         with st.expander("⚠️ Error Log", expanded=False):
+    #             if st.session_state.audio_loop.error_log:
+    #                 for error in st.session_state.audio_loop.error_log:
+    #                     st.error(error)
+    #             else:
+    #                 st.success("No errors")
 
     # Auto-refresh when session is active
     if st.session_state.session_active:
